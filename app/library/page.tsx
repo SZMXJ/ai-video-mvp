@@ -1,33 +1,10 @@
 "use client";
 
-import { createContext, useState, ReactNode } from "react";
-
-export type HistoryItem = {
-  time: string;
-  prompt: string;
-  style: string;
-};
-
-type UserState = {
-  history: HistoryItem[];
-  addHistory: (item: HistoryItem) => void;
-};
-
-export const UserContext = createContext<UserState>({
-  history: [],
-  addHistory: () => {},
-});
-
-export function UserProvider({ children }: { children: ReactNode }) {
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-
-  const addHistory = (item: HistoryItem) => {
-    setHistory((prev) => [item, ...prev]);
-  };
-
+export default function LibraryPage() {
   return (
-    <UserContext.Provider value={{ history, addHistory }}>
-      {children}
-    </UserContext.Provider>
+    <div style={{ padding: 40 }}>
+      <h1>我的视频库</h1>
+      <p>这里以后展示已生成的视频</p>
+    </div>
   );
 }
