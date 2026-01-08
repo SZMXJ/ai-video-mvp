@@ -1,26 +1,31 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useUser } from "../context/UserContext";
 
 export default function GeneratePage() {
   const params = useSearchParams();
-  const prompt = params.get("prompt");
-  const style = params.get("style");
+  const prompt = params.get("prompt") || "";
+  const style = params.get("style") || "";
 
-  const { credits, loggedIn } = useUser();
+  const { credits, loggedIn, addHistory } = useUser();
   const [status, setStatus] = useState<"loading" | "done">("loading");
 
   useEffect(() => {
     if (!loggedIn || credits <= 0) return;
 
     const timer = setTimeout(() => {
+      addHistory({
+        time: new Date().toLocaleString(),
+        prompt,
+        style,
+      });
       setStatus("done");
-    }, 1500);
+    }, 2000);
 
     return () => clearTimeout(timer);
-  }, [loggedIn, credits]);
+  }, [loggedIn, credits, prompt, style, addHistory]);
 
   return (
     <div style={{ padding: 40 }}>
@@ -33,8 +38,6 @@ export default function GeneratePage() {
         状态：
         {status === "loading" ? "生成中…" : "生成完成 ✅"}
       </p>
-
-      <p>剩余点数：{credits}</p>
     </div>
   );
 }

@@ -1,11 +1,6 @@
 "use client";
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  ReactNode,
-} from "react";
+import React, { createContext, useContext, useState } from "react";
 
 export type HistoryItem = {
   time: string;
@@ -23,40 +18,32 @@ type UserState = {
 
 const UserContext = createContext<UserState | null>(null);
 
-export function UserProvider({ children }: { children: ReactNode }) {
+export function UserProvider({ children }: { children: React.ReactNode }) {
   const [credits, setCredits] = useState(5);
   const [loggedIn, setLoggedIn] = useState(true);
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
   const addHistory = (item: HistoryItem) => {
-    setHistory((prev) => [...prev, item]);
+    setHistory((prev) => [item, ...prev]);
     setCredits((c) => Math.max(c - 1, 0));
   };
 
-  const login = () => {
-    setLoggedIn(true);
-  };
+  const login = () => setLoggedIn(true);
 
   return (
     <UserContext.Provider
-      value={{
-        credits,
-        loggedIn,
-        history,
-        addHistory,
-        login,
-      }}
+      value={{ credits, loggedIn, history, addHistory, login }}
     >
       {children}
     </UserContext.Provider>
   );
 }
 
-/** ✅ 你之前缺的就是这个 */
+/** ✅ 唯一允许页面使用的 Hook */
 export function useUser() {
   const ctx = useContext(UserContext);
   if (!ctx) {
-    throw new Error("useUser must be used inside UserProvider");
+    throw new Error("useUser must be used inside <UserProvider>");
   }
   return ctx;
 }
