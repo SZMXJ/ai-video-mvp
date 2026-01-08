@@ -7,22 +7,27 @@ import { useEffect, useState } from "react";
 import { useUser } from "../context/UserContext";
 
 export default function GeneratePage() {
-  const searchParams = useSearchParams();
-  const prompt = searchParams.get("prompt");
-  const style = searchParams.get("style");
+  const params = useSearchParams();
+  const prompt = params.get("prompt");
+  const style = params.get("style");
 
-  const { credits } = useUser();
+  const { credits, loggedIn, addHistory } = useUser();
   const [status, setStatus] = useState<"loading" | "done">("loading");
 
   useEffect(() => {
-    if (!prompt || credits <= 0) return;
+    if (!loggedIn || credits <= 0) return;
 
     const timer = setTimeout(() => {
       setStatus("done");
+      addHistory({
+        time: new Date().toISOString(),
+        prompt: prompt || "",
+        style: style || "",
+      });
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [prompt, credits]);
+  }, [loggedIn, credits, prompt, style, addHistory]);
 
   return (
     <div style={{ padding: 40 }}>
@@ -33,7 +38,7 @@ export default function GeneratePage() {
 
       <p>
         状态：
-        {status === "loading" ? " 生成中..." : " 生成完成 ✅"}
+        {status === "loading" ? "生成中..." : "生成完成 ✅"}
       </p>
     </div>
   );
