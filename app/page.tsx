@@ -1,28 +1,26 @@
 "use client";
 
-import { useUser } from "./context/UserContext";
 import { useRouter } from "next/navigation";
+import { useUser } from "./context/UserContext";
 
 export default function HomePage() {
   const router = useRouter();
-  const { loggedIn, credits, login } = useUser();
+  const { loggedIn, login } = useUser();
 
   return (
     <div style={{ padding: 40 }}>
       <h1>AI 视频 MVP</h1>
 
-      <p>登录状态：{loggedIn ? "已登录" : "未登录"}</p>
-      <p>积分：{credits}</p>
-
-      {!loggedIn && (
-        <button onClick={login} style={{ marginRight: 12 }}>
-          登录
-        </button>
+      {!loggedIn ? (
+        <button onClick={login}>登录（模拟）</button>
+      ) : (
+        <>
+          <p>已登录</p>
+          <button onClick={() => router.push("/generate")}>
+            去生成页面
+          </button>
+        </>
       )}
-
-      <button onClick={() => router.push("/generate")}>
-        去生成页面
-      </button>
     </div>
   );
 }

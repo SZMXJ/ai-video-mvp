@@ -1,6 +1,11 @@
 "use client";
 
-import React, { createContext, useContext, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+} from "react";
 
 export type HistoryItem = {
   time: string;
@@ -18,17 +23,18 @@ type UserState = {
 
 const UserContext = createContext<UserState | null>(null);
 
-export function UserProvider({ children }: { children: React.ReactNode }) {
+export function UserProvider({ children }: { children: ReactNode }) {
   const [credits, setCredits] = useState(5);
-  const [loggedIn, setLoggedIn] = useState(true);
+  const [loggedIn, setLoggedIn] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
   const addHistory = (item: HistoryItem) => {
-    setHistory((prev) => [item, ...prev]);
-    setCredits((c) => Math.max(c - 1, 0));
+    setHistory((prev) => [...prev, item]);
   };
 
-  const login = () => setLoggedIn(true);
+  const login = () => {
+    setLoggedIn(true);
+  };
 
   return (
     <UserContext.Provider
@@ -39,7 +45,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** ✅ 唯一允许页面使用的 Hook */
 export function useUser() {
   const ctx = useContext(UserContext);
   if (!ctx) {
