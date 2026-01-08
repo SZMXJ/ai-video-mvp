@@ -9,35 +9,18 @@ export default function GeneratePage() {
   const prompt = params.get("prompt");
   const style = params.get("style");
 
-  const {
-    loggedIn,
-    credits,
-    login,
-    addHistory,
-  } = useUser();
-
+  const { credits, loggedIn } = useUser();
   const [status, setStatus] = useState<"loading" | "done">("loading");
 
   useEffect(() => {
-    // 模拟自动登录（后面你可以换成真实登录）
-    if (!loggedIn) {
-      login();
-      return;
-    }
-
-    if (credits <= 0 || !prompt || !style) return;
+    if (!loggedIn || credits <= 0) return;
 
     const timer = setTimeout(() => {
-      addHistory({
-        time: new Date().toLocaleString(),
-        prompt,
-        style,
-      });
       setStatus("done");
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [loggedIn, credits, prompt, style, login, addHistory]);
+  }, [loggedIn, credits]);
 
   return (
     <div style={{ padding: 40 }}>
@@ -50,6 +33,8 @@ export default function GeneratePage() {
         状态：
         {status === "loading" ? "生成中…" : "生成完成 ✅"}
       </p>
+
+      <p>剩余点数：{credits}</p>
     </div>
   );
 }
