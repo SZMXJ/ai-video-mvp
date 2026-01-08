@@ -1,26 +1,28 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useUser } from "../context/UserContext";
 
 export default function GeneratePage() {
-  const params = useSearchParams();
-  const prompt = params.get("prompt");
-  const style = params.get("style");
+  const searchParams = useSearchParams();
+  const prompt = searchParams.get("prompt");
+  const style = searchParams.get("style");
 
-  const { credits, loggedIn } = useUser();
+  const { credits } = useUser();
   const [status, setStatus] = useState<"loading" | "done">("loading");
 
   useEffect(() => {
-    if (!loggedIn || credits <= 0) return;
+    if (!prompt || credits <= 0) return;
 
     const timer = setTimeout(() => {
       setStatus("done");
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [loggedIn, credits]);
+  }, [prompt, credits]);
 
   return (
     <div style={{ padding: 40 }}>
