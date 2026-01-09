@@ -1,22 +1,111 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-/* -------- Global theme variables -------- */
-:root {
-  --background: #000000;
-  --foreground: #ffffff;
+/* ====== Base ====== */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  color: #fff;
+  font-family: Inter, system-ui, sans-serif;
+  overflow-x: hidden;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #000000;
-    --foreground: #ffffff;
-  }
+/* ====== Futuristic animated background ====== */
+.futuristic-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(0,255,200,0.15), transparent 40%),
+    radial-gradient(circle at 80% 30%, rgba(150,100,255,0.18), transparent 40%),
+    radial-gradient(circle at 50% 80%, rgba(0,180,255,0.12), transparent 40%);
+  animation: bgFlow 20s linear infinite;
+  filter: blur(40px);
+  z-index: 0;
 }
 
-html,
-body {
-  background: var(--background);
-  color: var(--foreground);
+@keyframes bgFlow {
+  0% { transform: translate(0,0); }
+  50% { transform: translate(-80px, 60px); }
+  100% { transform: translate(0,0); }
+}
+
+/* ====== Glow text ====== */
+.gradient-text {
+  background: linear-gradient(90deg, #00f0ff, #a78bfa, #00ffcc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ====== Buttons ====== */
+.btn-primary {
+  padding: 14px 34px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #00f0ff, #00ffcc);
+  color: #000;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .2s, box-shadow .2s;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 40px rgba(0,255,200,.6);
+}
+
+.btn-outline {
+  padding: 14px 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.3);
+  background: transparent;
+  color: #fff;
+}
+
+/* ====== Animated demo panel ====== */
+.demo-panel {
+  position: relative;
+  height: 420px;
+  border-radius: 24px;
+  overflow: hidden;
+  background: linear-gradient(120deg, #0f172a, #1e1b4b, #022c22);
+}
+
+.demo-panel::before {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: conic-gradient(
+    from 0deg,
+    #00f0ff,
+    #7c3aed,
+    #00ffcc,
+    #00f0ff
+  );
+  animation: spin 18s linear infinite;
+}
+
+.demo-panel::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  background: #000;
+  border-radius: 18px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ====== Gallery animation cards ====== */
+.motion-card {
+  height: 220px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #0ea5e9, #7c3aed, #10b981);
+  background-size: 300% 300%;
+  animation: gradientMove 8s ease infinite;
+}
+
+@keyframes gradientMove {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
