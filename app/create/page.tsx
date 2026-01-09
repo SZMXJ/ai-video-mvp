@@ -1,176 +1,323 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+
+/* ================= CONFIG ================= */
+
+const styles = ["Cinematic", "Anime", "Realistic", "Sci-Fi", "Cyberpunk", "Fantasy"];
+const ratios = ["Auto", "1:1", "4:3", "16:9", "21:9", "5:4", "3:2", "2:3", "9:16", "3:4", "4:5"];
+const durations = ["4s", "8s", "12s"];
+
+const PROMPT_ASSIST: Record<string, string> = {
+  Cinematic:
+    "cinematic lighting, dramatic atmosphere, shallow depth of field, smooth camera movement, 35mm lens, film grain, ultra high quality",
+  Anime:
+    "anime style, vibrant colors, detailed background, dynamic motion, expressive characters, high quality animation",
+  Realistic:
+    "photorealistic, natural lighting, realistic textures, depth of field, ultra high resolution, real world camera",
+  "Sci-Fi":
+    "futuristic sci-fi style, neon lighting, advanced technology, cinematic composition, epic scale, ultra detailed",
+  Cyberpunk:
+    "cyberpunk style, neon lights, dark atmosphere, rain, futuristic city, cinematic lighting, ultra detailed",
+  Fantasy:
+    "fantasy style, magical atmosphere, epic lighting, cinematic composition, ultra detailed, high quality",
+};
+
+/* ================= TYPES ================= */
+
+type GenerationJob = {
+  id: string;
+  prompt: string;
+  status: "generating" | "done";
+  progress: number;
+};
+
+/* ================= PAGE ================= */
 
 export default function CreatePage() {
+  const [mode, setMode] = useState<"text" | "image">("text");
   const [prompt, setPrompt] = useState("");
-  const [model, setModel] = useState("cinematic");
+  const [style, setStyle] = useState("Cinematic");
   const [ratio, setRatio] = useState("16:9");
-  const [duration, setDuration] = useState(5);
-  const [camera, setCamera] = useState("static");
-  const [style, setStyle] = useState("realistic");
-  const [loading, setLoading] = useState(false);
+  const [duration, setDuration] = useState("4s");
 
-  const handleGenerate = () => {
-    if (!prompt.trim()) {
-      alert("Please enter a prompt");
+  const [startImage, setStartImage] = useState<File | null>(null);
+  const [endImage, setEndImage] = useState<File | null>(null);
+
+  /* ===== Credits ===== */
+  const [userCredits, setUserCredits] = useState(66);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
+  /* ===== Global Status (保留) ===== */
+  const [status, setStatus] = useState<"idle" | "generating" | "done">("idle");
+  const [progress, setProgress] = useState(0);
+
+  /* ===== Jobs Queue ===== */
+  const [jobs, setJobs] = useState<GenerationJob[]>([]);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const creditsCost =
+    duration === "4s" ? 8 : duration === "8s" ? 16 : 24;
+
+  /* ================= Generate ================= */
+
+  const generate = () => {
+    if (!prompt.trim()) return;
+
+    if (userCredits < creditsCost) {
+      setShowUpgrade(true);
       return;
     }
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      alert(
-        `(Mock) Video generation started\nModel: ${model}\nStyle: ${style}\nCamera: ${camera}`
-      );
-    }, 1800);
+
+    setUserCredits((c) => c - creditsCost);
+
+    const id = Date.now().toString();
+
+    const newJob: GenerationJob = {
+      id,
+      prompt,
+      status: "generating",
+      progress: 0,
+    };
+
+    setJobs((prev) => [newJob, ...prev]);
+
+    setPrompt("");
+    setStatus("generating");
+    setProgress(0);
   };
 
+  /* ================= Prompt Assist ================= */
+
+  const applyPromptAssist = () => {
+    const suffix = PROMPT_ASSIST[style];
+    if (!suffix) return;
+
+    setPrompt((p) =>
+      p.includes(suffix) ? p : `${p.trim()}${p ? ", " : ""}${suffix}`
+    );
+  };
+
+  /* ================= Fake Progress ================= */
+
+  useEffect(() => {
+    if (status !== "generating") return;
+
+    const timer = setInterval(() => {
+      setProgress((p) => {
+        if (p >= 100) {
+          clearInterval(timer);
+          setStatus("done");
+
+          setJobs((prev) =>
+            prev.map((job, i) =>
+              i === 0 ? { ...job, status: "done", progress: 100 } : job
+            )
+          );
+
+          return 100;
+        }
+
+        setJobs((prev) =>
+          prev.map((job, i) =>
+            i === 0 ? { ...job, progress: p + 5 } : job
+          )
+        );
+
+        return p + 5;
+      });
+    }, 300);
+
+    return () => clearInterval(timer);
+  }, [status]);
+
   return (
-    <div className="mx-auto max-w-7xl px-6 py-10">
-      <h1 className="mb-2 text-3xl font-semibold">Create AI Video</h1>
-      <p className="mb-8 text-white/60">
-        Generate cinematic AI videos from text. Similar to Kling AI workflow.
-      </p>
+    <div className="flex h-screen bg-black text-white relative">
+      {/* ================= LEFT ================= */}
+      <aside className="w-56 border-r border-white/10 p-4 flex flex-col">
+        <div className="text-sm text-white/50 mb-3">Create Mode</div>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        {/* ================= LEFT PANEL ================= */}
-        <div className="space-y-6 lg:col-span-1">
-          {/* Prompt */}
-          <div>
-            <label className="mb-2 block text-sm text-white/70">
-              Prompt
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="A cinematic drone shot flying through a futuristic city at sunset..."
-              className="h-36 w-full rounded-xl border border-white/10 bg-white/5 p-4 focus:border-cyan-400 focus:outline-none"
-            />
-            <div className="mt-2 text-xs text-white/40">
-              Tip: Describe subject, motion, lighting, camera angle.
-            </div>
+        <NavButton active={mode === "text"} onClick={() => setMode("text")} label="Text to Video" />
+        <NavButton active={mode === "image"} onClick={() => setMode("image")} label="Image to Video" />
+
+        <div className="mt-auto pt-4 border-t border-white/10">
+          <div className="text-xs text-white/50">Credits</div>
+          <div className="text-lg font-semibold">{userCredits}</div>
+        </div>
+      </aside>
+
+      {/* ================= CENTER ================= */}
+      <main className="w-[36%] min-w-[440px] p-6 overflow-y-auto">
+        <h1 className="text-xl font-semibold mb-4">
+          {mode === "text" ? "Text to Video" : "Image to Video"}
+        </h1>
+
+        {mode === "image" && (
+          <div className="mb-6 grid grid-cols-2 gap-4">
+            <FrameBox title="Start Frame" file={startImage} onChange={setStartImage} />
+            <FrameBox title="End Frame" file={endImage} onChange={setEndImage} />
           </div>
+        )}
 
-          {/* Model */}
-          <div>
-            <label className="mb-2 block text-sm text-white/70">
-              Generation Model
-            </label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/5 p-3"
-            >
-              <option value="cinematic">Cinematic Pro</option>
-              <option value="anime">Anime V2</option>
-              <option value="realistic">Ultra Realistic</option>
-              <option value="motion">Motion Control</option>
-            </select>
-          </div>
+        <div className="relative mb-6">
+          <textarea
+            ref={textareaRef}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            className="w-full h-40 rounded-2xl bg-zinc-900 border border-white/10 p-4 pr-40"
+            placeholder="Describe your video..."
+          />
 
-          {/* Style */}
-          <div>
-            <label className="mb-2 block text-sm text-white/70">
-              Visual Style
-            </label>
-            <select
-              value={style}
-              onChange={(e) => setStyle(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/5 p-3"
-            >
-              <option value="realistic">Realistic</option>
-              <option value="cinema">Cinema Film</option>
-              <option value="cyberpunk">Cyberpunk</option>
-              <option value="fantasy">Fantasy</option>
-            </select>
-          </div>
-
-          {/* Camera */}
-          <div>
-            <label className="mb-2 block text-sm text-white/70">
-              Camera Movement
-            </label>
-            <select
-              value={camera}
-              onChange={(e) => setCamera(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/5 p-3"
-            >
-              <option value="static">Static</option>
-              <option value="pan">Pan</option>
-              <option value="zoom">Zoom In</option>
-              <option value="drone">Drone Fly</option>
-            </select>
-          </div>
-
-          {/* Duration */}
-          <div>
-            <label className="mb-2 block text-sm text-white/70">
-              Duration (seconds)
-            </label>
-            <input
-              type="range"
-              min={3}
-              max={10}
-              value={duration}
-              onChange={(e) => setDuration(Number(e.target.value))}
-              className="w-full"
-            />
-            <div className="mt-1 text-sm text-white/60">
-              {duration}s
-            </div>
-          </div>
-
-          {/* Ratio */}
-          <div>
-            <label className="mb-2 block text-sm text-white/70">
-              Aspect Ratio
-            </label>
-            <select
-              value={ratio}
-              onChange={(e) => setRatio(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/5 p-3"
-            >
-              <option>16:9</option>
-              <option>9:16</option>
-              <option>1:1</option>
-            </select>
-          </div>
-
-          {/* Generate */}
           <button
-            onClick={handleGenerate}
-            disabled={loading}
-            className="w-full rounded-xl bg-cyan-400 py-3 font-medium text-black transition hover:bg-cyan-300 disabled:opacity-50"
+            onClick={applyPromptAssist}
+            className="absolute right-3 top-3 text-xs rounded-lg px-3 py-1 bg-white/10 hover:bg-white/20"
           >
-            {loading ? "Generating..." : "Generate Video"}
+            ✨ Prompt Assist
           </button>
-        </div>
 
-        {/* ================= RIGHT PANEL ================= */}
-        <div className="lg:col-span-2">
-          <div className="relative flex h-[460px] items-center justify-center rounded-3xl border border-white/10 bg-gradient-to-br from-purple-600/30 to-cyan-600/30">
-            {loading ? (
-              <div className="animate-pulse text-white/70">
-                AI is generating your video…
-              </div>
-            ) : (
-              <div className="text-center text-white/60">
-                <div className="mb-2 text-lg font-medium">
-                  Video Preview
-                </div>
-                <div className="text-sm">
-                  Generated video will appear here
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Task Info */}
-          <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
-            Status: Idle · Resolution: 1080p · FPS: 24
+          <div className="absolute right-3 bottom-3 flex items-center gap-3">
+            <div className="text-xs text-white/70">⚡ {creditsCost} credits</div>
+            <button
+              onClick={generate}
+              className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-medium text-black"
+            >
+              Generate
+            </button>
           </div>
         </div>
-      </div>
+
+        <SelectPopover title="Style" value={style} options={styles} onChange={setStyle} />
+        <SelectPopover title="Aspect Ratio" value={ratio} options={ratios} onChange={setRatio} />
+        <SelectPopover title="Duration" value={duration} options={durations} onChange={setDuration} />
+      </main>
+
+      {/* ================= PREVIEW ================= */}
+      <section className="flex-1 p-6 border-l border-white/10 overflow-y-auto">
+        <div className="space-y-4">
+          {jobs.length === 0 && (
+            <div className="h-full rounded-3xl bg-zinc-900 flex items-center justify-center text-white/40">
+              Video Preview
+            </div>
+          )}
+
+          {jobs.map((job) => (
+            <div key={job.id} className="rounded-2xl bg-zinc-900 border border-white/10 p-4">
+              <div className="text-xs text-white/40 mb-1">Prompt</div>
+              <div className="text-sm mb-3 line-clamp-2">{job.prompt}</div>
+
+              {job.status === "generating" && (
+                <>
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} className="h-16 rounded-lg bg-white/5 animate-pulse" />
+                    ))}
+                  </div>
+
+                  <div className="text-xs text-white/60 mb-1">
+                    Generating… {job.progress}%
+                  </div>
+
+                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-cyan-400 transition-all"
+                      style={{ width: `${job.progress}%` }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {job.status === "done" && (
+                <div className="text-sm text-white/60">✅ Video generated</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ================= UPGRADE MODAL ================= */}
+      {showUpgrade && (
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="w-[360px] rounded-2xl bg-zinc-900 border border-white/10 p-6">
+            <h2 className="text-lg font-semibold mb-2">Not enough credits</h2>
+            <p className="text-sm text-white/60 mb-4">
+              You need {creditsCost} credits, but only have {userCredits}.
+            </p>
+
+            <button className="w-full mb-3 rounded-xl bg-cyan-400 py-2 text-black font-medium">
+              Upgrade Plan
+            </button>
+
+            <button
+              onClick={() => setShowUpgrade(false)}
+              className="w-full text-sm text-white/50 hover:text-white"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ================= COMPONENTS ================= */
+
+function NavButton({ active, label, onClick }: any) {
+  return (
+    <button
+      onClick={onClick}
+      className={`mb-2 rounded-xl px-4 py-3 ${
+        active ? "bg-cyan-400 text-black" : "bg-white/5 hover:bg-white/10"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function FrameBox({ title, file, onChange }: any) {
+  return (
+    <label className="rounded-2xl border border-white/10 bg-zinc-900 p-4 flex flex-col items-center cursor-pointer">
+      <div className="text-sm mb-2">{title}</div>
+      {file ? file.name : "Click to upload"}
+      <input type="file" hidden onChange={(e) => onChange(e.target.files?.[0] || null)} />
+    </label>
+  );
+}
+
+function SelectPopover({ title, value, options, onChange }: any) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mb-5 relative">
+      <div className="text-sm text-white/60 mb-2">{title}</div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full rounded-xl bg-zinc-900 border border-white/10 px-4 py-3 flex justify-between"
+      >
+        {value}
+        <span>▾</span>
+      </button>
+
+      {open && (
+        <div className="absolute w-full mt-2 bg-zinc-900 border border-white/10 rounded-xl z-50">
+          {options.map((o: string) => (
+            <button
+              key={o}
+              onClick={() => {
+                onChange(o);
+                setOpen(false);
+              }}
+              className={`w-full px-4 py-2 text-left hover:bg-white/10 ${
+                o === value ? "text-cyan-400" : ""
+              }`}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

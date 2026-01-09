@@ -1,45 +1,53 @@
 "use client";
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  ReactNode,
-} from "react";
+import { createContext, useContext, useState } from "react";
 
-export type HistoryItem = {
-  time: string;
-  prompt: string;
-  style: string;
-};
-
-type UserState = {
-  credits: number;
+type User = {
   loggedIn: boolean;
-  history: HistoryItem[];
-  addHistory: (item: HistoryItem) => void;
-  login: () => void;
+  plan: "free" | "pro";
+  credits: number;
 };
 
-const UserContext = createContext<UserState | null>(null);
+const UserContext = createContext<{
+  user: User;
+  login: () => void;
+  logout: () => void;
+  upgrade: () => void;
+} | null>(null);
 
-export function UserProvider({ children }: { children: ReactNode }) {
-  const [credits, setCredits] = useState(5);
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-
-  const addHistory = (item: HistoryItem) => {
-    setHistory((prev) => [...prev, item]);
-  };
+export function UserProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User>({
+    loggedIn: false,
+    plan: "free",
+    credits: 10,
+  });
 
   const login = () => {
-    setLoggedIn(true);
+    setUser({
+      loggedIn: true,
+      plan: "free",
+      credits: 10,
+    });
+  };
+
+  const logout = () => {
+    setUser({
+      loggedIn: false,
+      plan: "free",
+      credits: 0,
+    });
+  };
+
+  const upgrade = () => {
+    setUser((u) => ({
+      ...u,
+      plan: "pro",
+      credits: 999,
+    }));
   };
 
   return (
-    <UserContext.Provider
-      value={{ credits, loggedIn, history, addHistory, login }}
-    >
+    <UserContext.Provider value={{ user, login, logout, upgrade }}>
       {children}
     </UserContext.Provider>
   );
@@ -47,8 +55,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
 export function useUser() {
   const ctx = useContext(UserContext);
-  if (!ctx) {
-    throw new Error("useUser must be used inside <UserProvider>");
-  }
+  if (!ctx) throw new Error("useUser must be used inside UserProvider");
   return ctx;
 }
