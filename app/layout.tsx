@@ -1,4 +1,3 @@
-import "./globals.css";
 import Link from "next/link";
 
 export default function RootLayout({
@@ -9,24 +8,31 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-black text-white">
-        {/* NAVBAR */}
-        <header className="sticky top-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur">
-          <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
-            
+        {/* ===== NAV BAR ===== */}
+        <header className="border-b border-white/10">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
             {/* Logo */}
-            <Link href="/" className="text-xl font-semibold text-cyan-400">
+            <Link href="/" className="text-xl font-bold text-cyan-400">
               VideoAI
             </Link>
 
             {/* Nav Links */}
-            <nav className="hidden md:flex items-center gap-8 text-sm text-white/80">
-              <Link href="/features" className="hover:text-white">Features</Link>
-              <Link href="/models" className="hover:text-white">Models</Link>
-              <Link href="/gallery" className="hover:text-white">Gallery</Link>
-              <Link href="/pricing" className="hover:text-white">Pricing</Link>
+            <nav className="hidden gap-8 md:flex text-white/70">
+              <Link href="/features" className="hover:text-white">
+                Features
+              </Link>
+              <Link href="/models" className="hover:text-white">
+                Models
+              </Link>
+              <Link href="/demo" className="hover:text-white">
+                Demo
+              </Link>
+              <Link href="/pricing" className="hover:text-white">
+                Pricing
+              </Link>
             </nav>
 
-            {/* Actions */}
+            {/* Right Actions */}
             <div className="flex items-center gap-4">
               <Link
                 href="/login"
@@ -42,12 +48,11 @@ export default function RootLayout({
                 Create Video
               </Link>
             </div>
-
           </div>
         </header>
 
-        {/* PAGE */}
-        <main>{children}</main>
+        {/* Page Content */}
+        {children}
       </body>
     </html>
   );
