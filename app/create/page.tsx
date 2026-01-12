@@ -23,6 +23,24 @@ const PROMPT_ASSIST: Record<string, string> = {
     "fantasy style, magical atmosphere, epic lighting, cinematic composition, ultra detailed, high quality",
 };
 
+/* ===== 多语言 Prompt Assist ===== */
+
+const PROMPT_ASSIST_I18N: Record<string, Record<string, string>> = {
+  zh: {
+    Cinematic: "电影级灯光，戏剧化氛围，浅景深，平滑镜头运动，高质量画面",
+    Anime: "动漫风格，色彩鲜艳，动态画面，高质量动画",
+  },
+};
+
+/* ================= UTILS ================= */
+
+function detectLanguage(text: string) {
+  if (/[\u4e00-\u9fa5]/.test(text)) return "zh";
+  if (/[\u3040-\u30ff]/.test(text)) return "jp";
+  if (/[\uac00-\ud7af]/.test(text)) return "kr";
+  return "en";
+}
+
 /* ================= TYPES ================= */
 
 type GenerationJob = {
@@ -36,7 +54,14 @@ type GenerationJob = {
 
 export default function CreatePage() {
   const [mode, setMode] = useState<"text" | "image">("text");
-  const [prompt, setPrompt] = useState("");
+
+  /* ===== 独立 Prompt（关键修复点） ===== */
+  const [textPrompt, setTextPrompt] = useState("");
+  const [imagePrompt, setImagePrompt] = useState("");
+
+  const prompt = mode === "text" ? textPrompt : imagePrompt;
+  const setPrompt = mode === "text" ? setTextPrompt : setImagePrompt;
+
   const [style, setStyle] = useState("Cinematic");
   const [ratio, setRatio] = useState("16:9");
   const [duration, setDuration] = useState("4s");
@@ -48,7 +73,7 @@ export default function CreatePage() {
   const [userCredits, setUserCredits] = useState(66);
   const [showUpgrade, setShowUpgrade] = useState(false);
 
-  /* ===== Global Status (保留) ===== */
+  /* ===== Global Status ===== */
   const [status, setStatus] = useState<"idle" | "generating" | "done">("idle");
   const [progress, setProgress] = useState(0);
 
@@ -56,9 +81,9 @@ export default function CreatePage() {
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const assistCountRef = useRef(0);
 
-  const creditsCost =
-    duration === "4s" ? 8 : duration === "8s" ? 16 : 24;
+  const creditsCost = duration === "4s" ? 8 : duration === "8s" ? 16 : 24;
 
   /* ================= Generate ================= */
 
@@ -74,29 +99,36 @@ export default function CreatePage() {
 
     const id = Date.now().toString();
 
-    const newJob: GenerationJob = {
-      id,
-      prompt,
-      status: "generating",
-      progress: 0,
-    };
-
-    setJobs((prev) => [newJob, ...prev]);
+    setJobs((prev) => [
+      {
+        id,
+        prompt,
+        status: "generating",
+        progress: 0,
+      },
+      ...prev,
+    ]);
 
     setPrompt("");
     setStatus("generating");
     setProgress(0);
   };
 
-  /* ================= Prompt Assist ================= */
+  /* ================= Prompt Assist（增强版） ================= */
 
   const applyPromptAssist = () => {
-    const suffix = PROMPT_ASSIST[style];
+    assistCountRef.current += 1;
+
+    const lang = detectLanguage(prompt);
+    const suffix =
+      PROMPT_ASSIST_I18N[lang]?.[style] || PROMPT_ASSIST[style];
+
     if (!suffix) return;
 
-    setPrompt((p) =>
-      p.includes(suffix) ? p : `${p.trim()}${p ? ", " : ""}${suffix}`
-    );
+    setPrompt((p) => {
+      const cleaned = p.replace(new RegExp(suffix, "gi"), "").trim();
+      return `${cleaned}${cleaned ? ", " : ""}${suffix}`;
+    });
   };
 
   /* ================= Fake Progress ================= */
@@ -109,13 +141,11 @@ export default function CreatePage() {
         if (p >= 100) {
           clearInterval(timer);
           setStatus("done");
-
           setJobs((prev) =>
             prev.map((job, i) =>
               i === 0 ? { ...job, status: "done", progress: 100 } : job
             )
           );
-
           return 100;
         }
 
@@ -133,22 +163,20 @@ export default function CreatePage() {
   }, [status]);
 
   return (
-    <div className="flex h-screen bg-black text-white relative">
+    <div className="flex flex-col md:flex-row h-screen bg-black text-white relative">
       {/* ================= LEFT ================= */}
-      <aside className="w-56 border-r border-white/10 p-4 flex flex-col">
+      <aside className="w-full md:w-56 border-b md:border-b-0 md:border-r border-white/10 p-4 flex md:flex-col">
         <div className="text-sm text-white/50 mb-3">Create Mode</div>
-
         <NavButton active={mode === "text"} onClick={() => setMode("text")} label="Text to Video" />
         <NavButton active={mode === "image"} onClick={() => setMode("image")} label="Image to Video" />
-
-        <div className="mt-auto pt-4 border-t border-white/10">
+        <div className="mt-auto pt-4 border-t border-white/10 hidden md:block">
           <div className="text-xs text-white/50">Credits</div>
           <div className="text-lg font-semibold">{userCredits}</div>
         </div>
       </aside>
 
       {/* ================= CENTER ================= */}
-      <main className="w-[36%] min-w-[440px] p-6 overflow-y-auto">
+      <main className="w-full md:w-[36%] md:min-w-[440px] p-6 overflow-y-auto">
         <h1 className="text-xl font-semibold mb-4">
           {mode === "text" ? "Text to Video" : "Image to Video"}
         </h1>
@@ -193,31 +221,27 @@ export default function CreatePage() {
       </main>
 
       {/* ================= PREVIEW ================= */}
-      <section className="flex-1 p-6 border-l border-white/10 overflow-y-auto">
-        <div className="space-y-4">
-          {jobs.length === 0 && (
-            <div className="h-full rounded-3xl bg-zinc-900 flex items-center justify-center text-white/40">
-              Video Preview
-            </div>
-          )}
-
-          {jobs.map((job) => (
-            <div key={job.id} className="rounded-2xl bg-zinc-900 border border-white/10 p-4">
+      <section className="w-full md:flex-1 p-6 border-t md:border-t-0 md:border-l border-white/10 overflow-y-auto">
+        {jobs.length === 0 ? (
+          <div className="h-full rounded-3xl bg-zinc-900 flex items-center justify-center text-white/40">
+            Video Preview
+          </div>
+        ) : (
+          jobs.map((job) => (
+            <div key={job.id} className="mb-4 rounded-2xl bg-zinc-900 border border-white/10 p-4">
               <div className="text-xs text-white/40 mb-1">Prompt</div>
               <div className="text-sm mb-3 line-clamp-2">{job.prompt}</div>
 
-              {job.status === "generating" && (
+              {job.status === "generating" ? (
                 <>
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     {Array.from({ length: 6 }).map((_, i) => (
                       <div key={i} className="h-16 rounded-lg bg-white/5 animate-pulse" />
                     ))}
                   </div>
-
                   <div className="text-xs text-white/60 mb-1">
                     Generating… {job.progress}%
                   </div>
-
                   <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-cyan-400 transition-all"
@@ -225,14 +249,12 @@ export default function CreatePage() {
                     />
                   </div>
                 </>
-              )}
-
-              {job.status === "done" && (
+              ) : (
                 <div className="text-sm text-white/60">✅ Video generated</div>
               )}
             </div>
-          ))}
-        </div>
+          ))
+        )}
       </section>
 
       {/* ================= UPGRADE MODAL ================= */}
@@ -243,11 +265,9 @@ export default function CreatePage() {
             <p className="text-sm text-white/60 mb-4">
               You need {creditsCost} credits, but only have {userCredits}.
             </p>
-
             <button className="w-full mb-3 rounded-xl bg-cyan-400 py-2 text-black font-medium">
               Upgrade Plan
             </button>
-
             <button
               onClick={() => setShowUpgrade(false)}
               className="w-full text-sm text-white/50 hover:text-white"
