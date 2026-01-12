@@ -55,7 +55,7 @@ type GenerationJob = {
 export default function CreatePage() {
   const [mode, setMode] = useState<"text" | "image">("text");
 
-  /* ===== 独立 Prompt（关键修复点） ===== */
+  /* ===== 独立 Prompt ===== */
   const [textPrompt, setTextPrompt] = useState("");
   const [imagePrompt, setImagePrompt] = useState("");
 
@@ -83,7 +83,18 @@ export default function CreatePage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const assistCountRef = useRef(0);
 
-  const creditsCost = duration === "4s" ? 8 : duration === "8s" ? 16 : 24;
+  /* 🧭 Newbie Guide */
+  const [showGuide, setShowGuide] = useState(false);
+
+  useEffect(() => {
+    if (!localStorage.getItem("create_guide_seen")) {
+      setShowGuide(true);
+      localStorage.setItem("create_guide_seen", "1");
+    }
+  }, []);
+
+  const creditsCost =
+    duration === "4s" ? 8 : duration === "8s" ? 16 : 24;
 
   /* ================= Generate ================= */
 
@@ -114,7 +125,7 @@ export default function CreatePage() {
     setProgress(0);
   };
 
-  /* ================= Prompt Assist（增强版） ================= */
+  /* ================= Prompt Assist ================= */
 
   const applyPromptAssist = () => {
     assistCountRef.current += 1;
@@ -141,11 +152,13 @@ export default function CreatePage() {
         if (p >= 100) {
           clearInterval(timer);
           setStatus("done");
+
           setJobs((prev) =>
             prev.map((job, i) =>
               i === 0 ? { ...job, status: "done", progress: 100 } : job
             )
           );
+
           return 100;
         }
 
@@ -164,6 +177,20 @@ export default function CreatePage() {
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-black text-white relative">
+
+      {/* 🧭 Newbie Guide Banner */}
+      {showGuide && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-zinc-900 border border-white/10 rounded-xl px-4 py-2 text-sm">
+          ✨ Write a prompt → Click Prompt Assist → Generate your first video
+          <button
+            onClick={() => setShowGuide(false)}
+            className="ml-3 text-cyan-400"
+          >
+            Got it
+          </button>
+        </div>
+      )}
+
       {/* ================= LEFT ================= */}
       <aside className="w-full md:w-56 border-b md:border-b-0 md:border-r border-white/10 p-4 flex md:flex-col">
         <div className="text-sm text-white/50 mb-3">Create Mode</div>
@@ -188,7 +215,7 @@ export default function CreatePage() {
           </div>
         )}
 
-        <div className="relative mb-6">
+        <div className="relative mb-2">
           <textarea
             ref={textareaRef}
             value={prompt}
@@ -215,6 +242,20 @@ export default function CreatePage() {
           </div>
         </div>
 
+        {/* 🧭 Try Example */}
+        <button
+          onClick={() =>
+            setPrompt(
+              detectLanguage(prompt) === "zh"
+                ? "生成一段电影级未来城市视频，夜晚，霓虹灯，航拍镜头"
+                : "A cinematic futuristic city at night with neon lights, aerial camera"
+            )
+          }
+          className="text-xs text-cyan-400 mb-6"
+        >
+          ✨ Try an example
+        </button>
+
         <SelectPopover title="Style" value={style} options={styles} onChange={setStyle} />
         <SelectPopover title="Aspect Ratio" value={ratio} options={ratios} onChange={setRatio} />
         <SelectPopover title="Duration" value={duration} options={durations} onChange={setDuration} />
@@ -234,23 +275,14 @@ export default function CreatePage() {
 
               {job.status === "generating" ? (
                 <>
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <div key={i} className="h-16 rounded-lg bg-white/5 animate-pulse" />
-                    ))}
-                  </div>
                   <div className="text-xs text-white/60 mb-1">
                     Generating… {job.progress}%
                   </div>
-                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-cyan-400 transition-all"
-                      style={{ width: `${job.progress}%` }}
-                    />
-                  </div>
                 </>
               ) : (
-                <div className="text-sm text-white/60">✅ Video generated</div>
+                <div className="text-sm text-white/60">
+                  ✅ Video generated · You can create another one
+                </div>
               )}
             </div>
           ))

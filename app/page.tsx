@@ -14,11 +14,18 @@ export default function HomePage() {
 
         <div className="mx-auto flex h-full max-w-7xl flex-col items-center justify-center px-6 text-center">
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
-            AI Video Generation
+            Turn Text into Stunning AI Videos
           </h1>
+
           <p className="mt-6 max-w-2xl text-lg text-white/70">
-            Create cinematic, anime, realistic videos from text or images.
-            Powered by next-gen generative AI.
+            Describe your idea. Choose a style.  
+            Let AI generate your video in seconds.
+          </p>
+
+          {/* NEW: example prompt */}
+          <p className="mt-4 text-sm text-white/40">
+            Example prompt: “A cinematic shot of a futuristic city at night,
+            flying camera”
           </p>
 
           <div className="mt-10 flex gap-6">
@@ -26,14 +33,55 @@ export default function HomePage() {
               href="/create"
               className="rounded-full bg-cyan-400 px-8 py-4 text-lg font-medium text-black hover:bg-cyan-300 transition"
             >
-              Start Creating
+              🎬 Create Video
             </Link>
             <Link
-              href="/pricing"
+              href="#examples"
               className="rounded-full border border-white/20 px-8 py-4 text-lg text-white hover:bg-white/10 transition"
             >
-              View Pricing
+              ▶ See Examples
             </Link>
+          </div>
+
+          <p className="mt-6 text-sm text-white/50">
+            Free credits included · No credit card required
+          </p>
+        </div>
+      </section>
+
+      {/* ================= HOW IT WORKS ================= */}
+      <section className="bg-black py-28 text-white">
+        <div className="mx-auto max-w-7xl px-6">
+          <h2 className="mb-16 text-center text-4xl font-semibold">
+            Create your first video in 3 steps
+          </h2>
+
+          <div className="grid gap-10 md:grid-cols-3">
+            {[
+              {
+                title: "Write what you imagine",
+                desc: "Just type naturally. No prompt skills required.",
+              },
+              {
+                title: "Pick style & duration",
+                desc: "Cinematic, Anime, Realistic · 4s, 8s, 12s",
+              },
+              {
+                title: "Click Generate",
+                desc: "AI handles motion, camera and visuals for you.",
+              },
+            ].map((step, i) => (
+              <div
+                key={step.title}
+                className="rounded-3xl border border-white/10 bg-white/5 p-8"
+              >
+                <div className="mb-4 text-3xl font-bold text-cyan-400">
+                  {i + 1}
+                </div>
+                <h3 className="text-xl font-medium">{step.title}</h3>
+                <p className="mt-2 text-sm text-white/60">{step.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -42,26 +90,26 @@ export default function HomePage() {
       <section className="bg-black py-28 text-white">
         <div className="mx-auto max-w-7xl px-6">
           <h2 className="mb-16 text-center text-4xl font-semibold">
-            Powerful AI Video Tools
+            Built for creators, not editors
           </h2>
 
           <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
             {[
               {
                 title: "Text to Video",
-                desc: "Turn prompts into cinematic videos with motion and depth.",
+                desc: "Turn simple prompts into cinematic videos.",
               },
               {
                 title: "Image to Video",
-                desc: "Animate still images with realistic movement.",
+                desc: "Animate still images with realistic motion.",
               },
               {
-                title: "Camera Motion",
-                desc: "Control zoom, pan, and cinematic camera paths.",
+                title: "Prompt Assist",
+                desc: "Automatically improves your prompt for better results.",
               },
               {
                 title: "Style Control",
-                desc: "Anime, realistic, sci-fi, cinematic styles.",
+                desc: "Cinematic, Anime, Realistic, Sci-Fi and more.",
               },
             ].map((item) => (
               <Link
@@ -81,78 +129,54 @@ export default function HomePage() {
       </section>
 
       {/* ================= SHOWCASE ================= */}
-      <section className="bg-gradient-to-b from-black to-neutral-950 py-28 text-white">
+      <section
+        id="examples"
+        className="bg-gradient-to-b from-black to-neutral-950 py-28 text-white"
+      >
         <div className="mx-auto max-w-7xl px-6">
           <h2 className="mb-14 text-center text-4xl font-semibold">
-            What Creators Are Making
+            Try these example prompts
           </h2>
 
           <div className="grid gap-8 md:grid-cols-3">
-            {["Sci-Fi City", "Anime Action", "Realistic Nature"].map((label) => (
-              <div
-                key={label}
-                className="rounded-3xl border border-white/10 bg-white/5 p-6"
+            {[
+              "A cyberpunk city at night, neon lights, rain",
+              "Anime character running through the city",
+              "Cinematic drone shot over mountains",
+            ].map((prompt) => (
+              <Link
+                key={prompt}
+                href="/create"
+                className="rounded-3xl border border-white/10 bg-white/5 p-6 hover:border-cyan-400 transition"
               >
                 <div className="mb-4 h-48 rounded-2xl bg-gradient-to-br from-cyan-500/30 to-purple-500/30" />
-                <p className="text-sm text-white/70">{label}</p>
-              </div>
+                <p className="text-xs text-white/40 mb-1">Prompt example</p>
+                <p className="text-sm text-white/70 line-clamp-2">
+                  {prompt}
+                </p>
+                <p className="mt-3 text-xs text-cyan-400">
+                  → Use this prompt
+                </p>
+              </Link>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ================= PRICING ================= */}
-      <section className="bg-black py-28 text-white">
-        <div className="mx-auto max-w-7xl px-6">
-          <h2 className="mb-16 text-center text-4xl font-semibold">
-            Simple Pricing
-          </h2>
-
-          <div className="grid gap-10 md:grid-cols-3">
-            {[
-              {
-                name: "Free",
-                price: "$0",
-                features: ["Low resolution", "Limited queue", "Watermark"],
-              },
-              {
-                name: "Pro",
-                price: "$29",
-                features: ["HD video", "Fast queue", "No watermark"],
-                highlight: true,
-              },
-              {
-                name: "Studio",
-                price: "$99",
-                features: ["4K video", "Priority queue", "API access"],
-              },
-            ].map((plan) => (
-              <div
-                key={plan.name}
-                className={`rounded-3xl border p-8 ${
-                  plan.highlight
-                    ? "border-cyan-400 bg-cyan-400/10"
-                    : "border-white/10 bg-white/5"
-                }`}
-              >
-                <h3 className="text-xl font-medium">{plan.name}</h3>
-                <p className="mt-4 text-4xl font-bold">{plan.price}</p>
-                <ul className="mt-6 space-y-2 text-sm text-white/70">
-                  {plan.features.map((f) => (
-                    <li key={f}>• {f}</li>
-                  ))}
-                </ul>
-
-                <Link
-                  href="/create"
-                  className="mt-8 inline-block w-full rounded-full bg-cyan-400 py-3 text-center font-medium text-black hover:bg-cyan-300 transition"
-                >
-                  Get Started
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* ================= FINAL CTA ================= */}
+      <section className="bg-black py-28 text-white text-center">
+        <h2 className="text-4xl font-semibold mb-6">
+          Ready to create your first AI video?
+        </h2>
+        <Link
+          href="/create"
+          className="inline-block rounded-full bg-cyan-400 px-10 py-4 text-lg font-medium text-black hover:bg-cyan-300 transition"
+        >
+          🎬 Start Creating
+        </Link>
+        <p className="mt-4 text-sm text-white/50">
+          Free credits included · Start in seconds
+        </p>
       </section>
 
       {/* ================= FOOTER ================= */}
