@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // ✅ Prisma 7 + prisma.config.ts: 这里不要写 url = env(...)
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  credits   Int      @default(0)
+
+  jobs      Job[]
+  ledger    CreditLedger[]
+
+  // ✅ 给 VideoJob 的反向关系（你之前缺这个导致 P1012）
+  videoJobs VideoJob[]
+}
+
+model Job {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+
+  mode       String
+  modelId    String
+  requestId  String   @unique
+  status     String   @default("QUEUED") // QUEUED/IN_PROGRESS/COMPLETED/FAILED
+  prompt     String?
+  inputJson  Json
+  outputJson Json?
+
+  createdAt  DateTime @default(now())
+  result    Json?
+  updatedAt  DateTime @updatedAt
+}
+
+model CreditLedger {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  delta     Int      // -扣费，+充值/返还
+  reason    String   // e.g. "JOB_CHARGE", "STRIPE_TOPUP"
+  meta      Json?
+  createdAt DateTime @default(now())
+}
+
+model VideoJob {
+  id          String   @id @default(cuid())
+  userId      String
+  status      String   // "generating" | "done" | "failed"
+  prompt      String
+  modelKey    String
+  durationSec Int
+  aspectRatio String
+  resolution  String?
+  creditsCost Int
+
+  remoteUrl   String?
+  videoUrl    String?
+  error       String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
