@@ -1,15 +1,16 @@
-// lib/prisma.ts
 import { PrismaClient } from "@prisma/client";
+import { withAccelerate } from "@prisma/extension-accelerate";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __prisma: PrismaClient | undefined;
+let _prisma: ReturnType<typeof makePrisma> | null = null;
+
+function makePrisma() {
+  return new PrismaClient({
+    log: ["error", "warn"],
+  }).$extends(withAccelerate());
 }
 
-export const prisma =
-  global.__prisma ??
-  new PrismaClient({
-    log: ["error", "warn"],
-  });
-
-if (process.env.NODE_ENV !== "production") global.__prisma = prisma;
+// ✅ 只有真正调用 prisma() 时才实例化，避免 next build 收集阶段就触发构造校验
+export function prisma() {
+  if (!_prisma) _prisma = makePrisma();
+  return _prisma;
+}
