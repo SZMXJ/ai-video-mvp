@@ -1,6 +1,6 @@
 generator client {
   provider   = "prisma-client-js"
-  engineType = "binary"
+  engineType = "client"
 }
 
 datasource db {
@@ -11,15 +11,48 @@ datasource db {
 model User {
   id      String  @id @default(cuid())
   email   String? @unique
+
   credits Int     @default(0)
+
+  // ✅ 必填且唯一：你所有逻辑用它定位用户
+  betaKey String  @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // relations
-  jobs      Job[]
-  ledger    CreditLedger[]
-  videoJobs VideoJob[]
+  jobs          Job[]
+  ledger        CreditLedger[]
+  videoJobs     VideoJob[]
+  stripeSessions StripeCheckoutSession[] // ✅ 补上反向关系，避免你之前 P1012
+}
+
+model StripeCheckoutSession {
+  id        String   @id // 直接用 Stripe session.id
+  userId    String
+  credits   Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model CreditLedger {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  delta  Int
+  reason String
+  meta   Json?
+
+  // ✅ 幂等 key：必须唯一
+  idempotencyKey String @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model Job {
@@ -32,7 +65,7 @@ model Job {
   modelId   String
   requestId String @unique
 
-  status String @default("QUEUED") // QUEUED/IN_PROGRESS/COMPLETED/FAILED
+  status String @default("QUEUED")
 
   prompt     String?
   inputJson  Json
@@ -45,28 +78,13 @@ model Job {
   @@index([userId, createdAt])
 }
 
-model CreditLedger {
-  id String @id @default(cuid())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  delta  Int // -扣费，+充值/返还
-  reason String // e.g. "JOB_CHARGE", "STRIPE_TOPUP"
-  meta   Json?
-
-  createdAt DateTime @default(now())
-
-  @@index([userId, createdAt])
-}
-
 model VideoJob {
   id String @id @default(cuid())
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  status   String // "generating" | "done" | "failed"
+  status   String
   prompt   String
   modelKey String
 

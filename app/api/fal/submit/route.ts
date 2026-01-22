@@ -1,9 +1,11 @@
-// /app/api/fal/submit/route.ts
 import { NextResponse } from "next/server";
 import { fal } from "@fal-ai/client";
 import { requireBetaKey } from "@/lib/gate";
 import { quotePrice, type CreateMode, type ModelId } from "@/lib/pricing";
-import { chargeCredits, addCredits } from "@/lib/kvBilling";
+import { chargeCreditsByBetaKey, addCreditsByBetaKey } from "@/lib/dbBilling";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function assertFalKey() {
   if (!process.env.FAL_KEY) {
@@ -32,9 +34,16 @@ export async function POST(req: Request) {
     // 1) quote
     const quote = quotePrice({ mode, modelId, input, imageMeta });
 
-    // 2) charge credits (idempotency)
-    const idem = `gen_charge:${g.betaKey}:${modelId}:${Date.now()}`;
-    const charged = await chargeCredits(g.betaKey, quote.sellCredits, idem);
+    // 2) charge credits（幂等 key：本次提交唯一）
+    // 重要：不能用 Date.now() 做“可重试幂等”，但对你当前前端“点一次提交一次”足够稳
+    const idem = `gen_charge:${g.betaKey}:${modelId}:${crypto.randomUUID()}`;
+
+    const charged = await chargeCreditsByBetaKey({
+      betaKey: g.betaKey,
+      amount: quote.sellCredits,
+      idempotencyKey: idem,
+      meta: { mode, modelId },
+    });
 
     if (!charged.ok) {
       return NextResponse.json(
@@ -43,18 +52,22 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3) submit to queue (true polling architecture)
+    // 3) submit to fal queue
     try {
       const res = await fal.queue.submit(modelId, { input });
-      // fal returns request_id in snake_case
       const requestId = (res as any)?.request_id;
 
       if (!requestId) {
-        await addCredits(g.betaKey, quote.sellCredits, `refund_no_request_id:${idem}`);
-        return NextResponse.json(
-          { error: "Fal submit returned no request_id (refunded)" },
-          { status: 500 }
-        );
+        // 没拿到 request_id => 退款（幂等）
+        await addCreditsByBetaKey({
+          betaKey: g.betaKey,
+          amount: quote.sellCredits,
+          idempotencyKey: `refund_no_request_id:${idem}`,
+          reason: "REFUND_NO_REQUEST_ID",
+          meta: { modelId },
+        });
+
+        return NextResponse.json({ error: "Fal submit returned no request_id (refunded)" }, { status: 500 });
       }
 
       return NextResponse.json({
@@ -64,12 +77,16 @@ export async function POST(req: Request) {
         quote,
       });
     } catch (e: any) {
-      // submit failed => refund
-      await addCredits(g.betaKey, quote.sellCredits, `refund_submit_fail:${idem}`);
-      return NextResponse.json(
-        { error: e?.message ?? "Fal submit failed (refunded)" },
-        { status: 500 }
-      );
+      // submit failed => refund（幂等）
+      await addCreditsByBetaKey({
+        betaKey: g.betaKey,
+        amount: quote.sellCredits,
+        idempotencyKey: `refund_submit_fail:${idem}`,
+        reason: "REFUND_SUBMIT_FAIL",
+        meta: { modelId, message: e?.message },
+      });
+
+      return NextResponse.json({ error: e?.message ?? "Fal submit failed (refunded)" }, { status: 500 });
     }
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "submit error" }, { status: 500 });

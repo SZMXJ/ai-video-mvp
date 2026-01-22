@@ -1,16 +1,25 @@
 import { PrismaClient } from "@prisma/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
 
-let _prisma: ReturnType<typeof makePrisma> | null = null;
-
 function makePrisma() {
+  const accelerateUrl = process.env.DATABASE_URL; // prisma+postgres://... (Accelerate)
+  if (!accelerateUrl) {
+    throw new Error("Missing env DATABASE_URL (Accelerate prisma+postgres://...)");
+  }
+
+  // ✅ Prisma Accelerate 必须把 accelerateUrl 传进 PrismaClient
   return new PrismaClient({
     log: ["error", "warn"],
+    accelerateUrl,
   }).$extends(withAccelerate());
 }
 
-// ✅ 只有真正调用 prisma() 时才实例化，避免 next build 收集阶段就触发构造校验
-export function prisma() {
-  if (!_prisma) _prisma = makePrisma();
-  return _prisma;
+const globalForPrisma = globalThis as unknown as {
+  prisma?: ReturnType<typeof makePrisma>;
+};
+
+export const prisma = globalForPrisma.prisma ?? makePrisma();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
 }

@@ -1,9 +1,11 @@
-// /app/api/fal/status/route.ts
 import { NextResponse } from "next/server";
 import { fal } from "@fal-ai/client";
 import { requireBetaKey } from "@/lib/gate";
-import { addCredits } from "@/lib/kvBilling";
+import { addCreditsByBetaKey } from "@/lib/dbBilling";
 import type { ModelId } from "@/lib/pricing";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function assertFalKey() {
   if (!process.env.FAL_KEY) {
@@ -11,13 +13,7 @@ function assertFalKey() {
   }
 }
 
-type FalStatus =
-  | "IN_QUEUE"
-  | "IN_PROGRESS"
-  | "COMPLETED"
-  | "FAILED"
-  | "CANCELLED"
-  | "UNKNOWN";
+type FalStatus = "IN_QUEUE" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "CANCELLED" | "UNKNOWN";
 
 export async function POST(req: Request) {
   const g = requireBetaKey(req);
@@ -36,14 +32,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing modelId/requestId" }, { status: 400 });
     }
 
-    // true polling: queue.status
     const st: any = await fal.queue.status(modelId, { requestId });
-
     const status: FalStatus = (st?.status ?? "UNKNOWN") as FalStatus;
 
-    // If FAILED: refund once (idempotent)
+    // FAILED => refund once（幂等）
     if (status === "FAILED" && chargedCredits && chargedCredits > 0) {
-      await addCredits(g.betaKey, chargedCredits, `refund_failed:${requestId}`);
+      await addCreditsByBetaKey({
+        betaKey: g.betaKey,
+        amount: chargedCredits,
+        idempotencyKey: `refund_failed:${requestId}`,
+        reason: "REFUND_FAILED",
+        meta: { modelId, requestId },
+      });
     }
 
     return NextResponse.json({ status });
