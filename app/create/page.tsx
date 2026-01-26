@@ -13,18 +13,19 @@ import {
 } from "@/lib/modelCatalog";
 
 type HistoryItem = {
-  id: string;
+  id: string; // client id
   mode: CreateMode;
   modelId: ModelId;
   createdAt: number;
   status: "QUEUED" | "IN_PROGRESS" | "COMPLETED" | "FAILED";
-  requestId?: string;
+  requestId?: string; // fal request_id
   prompt?: string;
   outputUrl?: string;
   outputType?: "video" | "image";
   input: Record<string, any>;
   chargedCredits?: number;
   imageMeta?: { width?: number; height?: number; mp?: number };
+  error?: string;
 };
 
 const MODE_TABS: Array<{ mode: CreateMode; label: string; sub: string }> = [
@@ -43,6 +44,7 @@ function clamp(n: number, min: number, max: number) {
 
 function pickOutputUrl(data: any): { url?: string; type?: "video" | "image" } {
   if (data?.video?.url) return { url: data.video.url, type: "video" };
+  if (Array.isArray(data?.videos) && data.videos[0]?.url) return { url: data.videos[0].url, type: "video" };
   if (Array.isArray(data?.images) && data.images[0]?.url) return { url: data.images[0].url, type: "image" };
   if (data?.image?.url) return { url: data.image.url, type: "image" };
   return {};
@@ -92,14 +94,9 @@ function makeDefaultForm(mode: CreateMode): ModeFormState {
   };
 }
 
-/** ===== Prompt Assist（英文行业默认）=====
- * 你说 docx 里也有各模型 prompt：我先做“可用版本”
- * 下一步你要“每个模型不同 assist”，我再把 docx 解析成结构化表接进来
- */
 const ASSIST_BY_MODE: Record<CreateMode, { assist: string; examples: string[] }> = {
   T2V: {
-    assist:
-      "Tip: describe subject + action + camera + lighting + style + mood + constraints. Keep it concrete.",
+    assist: "Tip: describe subject + action + camera + lighting + style + mood + constraints. Keep it concrete.",
     examples: [
       "A cinematic close-up of a chef torching crème brûlée, shallow depth of field, warm tungsten lighting, slow handheld camera, 35mm film grain.",
       "A playful mini trailer: a tiny fox director runs a film set inside a shoebox city, dynamic camera moves, vivid colors, premium look.",
@@ -107,8 +104,7 @@ const ASSIST_BY_MODE: Record<CreateMode, { assist: string; examples: string[] }>
     ],
   },
   I2V: {
-    assist:
-      "Tip: use the prompt to guide motion and camera. Mention what should move, what must stay stable, and the vibe.",
+    assist: "Tip: use the prompt to guide motion and camera. Mention what should move, what must stay stable, and the vibe.",
     examples: [
       "Continue naturally: gentle camera push-in, soft wind moves hair and fabric, keep the face identity consistent, cinematic lighting.",
       "Snowflakes falling as a car moves along the road at night, headlights reflecting on wet asphalt, smooth tracking shot.",
@@ -116,8 +112,7 @@ const ASSIST_BY_MODE: Record<CreateMode, { assist: string; examples: string[] }>
     ],
   },
   T2I: {
-    assist:
-      "Tip: specify composition + materials + lighting + lens + background. Add quality constraints if needed.",
+    assist: "Tip: specify composition + materials + lighting + lens + background. Add quality constraints if needed.",
     examples: [
       "Extreme close-up of a tiger eye, macro lens, dramatic rim light, ultra-detailed iris texture, photorealistic.",
       "A red panda eating bamboo in front of a vintage poster, soft studio lighting, high detail, natural colors.",
@@ -125,8 +120,7 @@ const ASSIST_BY_MODE: Record<CreateMode, { assist: string; examples: string[] }>
     ],
   },
   "I+T2I": {
-    assist:
-      "Tip: say what to change and what to keep. For upscaling, keep prompt empty or only add mild quality hints.",
+    assist: "Tip: say what to change and what to keep. For upscaling, keep prompt empty or only add mild quality hints.",
     examples: [
       "Make this donut look photorealistic: realistic glaze, subtle imperfections, studio lighting, keep shape unchanged.",
       "Change the background to a neon cyberpunk street, keep the subject pose and face exactly the same.",
@@ -134,6 +128,21 @@ const ASSIST_BY_MODE: Record<CreateMode, { assist: string; examples: string[] }>
     ],
   },
 };
+
+function StatusPill({ s }: { s: HistoryItem["status"] }) {
+  const cls =
+    s === "COMPLETED"
+      ? "bg-emerald-400/15 text-emerald-200 border-emerald-400/25"
+      : s === "FAILED"
+      ? "bg-rose-400/15 text-rose-200 border-rose-400/25"
+      : s === "IN_PROGRESS"
+      ? "bg-cyan-400/15 text-cyan-200 border-cyan-400/25"
+      : "bg-white/10 text-white/70 border-white/15";
+
+  const label = s === "QUEUED" ? "QUEUED" : s === "IN_PROGRESS" ? "IN PROGRESS" : s === "COMPLETED" ? "COMPLETED" : "FAILED";
+
+  return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${cls}`}>{label}</span>;
+}
 
 export default function CreatePage() {
   // ----- Gate (beta key) -----
@@ -160,12 +169,12 @@ export default function CreatePage() {
     return fetch(url, { ...init, headers });
   }
 
-  // ---------------- Layout (resizable) ----------------
+  // ---------------- Layout (resizable desktop) ----------------
   const shellRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
 
-  // ✅ 用百分比控制两栏，拖拽时两边都会变
-  const [splitPct, setSplitPct] = useState(55);
+  // ✅ 默认让 Preview 更大一点（右侧更宽）
+  const [splitPct, setSplitPct] = useState(42); // 左侧编辑占比（越小预览越大）
 
   function setSplitFromClientX(clientX: number) {
     const shell = shellRef.current;
@@ -177,16 +186,14 @@ export default function CreatePage() {
 
     const x = clientX - rect.left;
 
-    // Kling-like bounds
     const minEditorPx = 420;
-    const minRightPx = 420;
-
+    const minRightPx = 560; // ✅ Preview 更宽
     const minX = sidebarPx + minEditorPx;
     const maxX = rect.width - minRightPx - dividerPx;
 
     const clampedX = clamp(x, minX, maxX);
     const pct = (clampedX / rect.width) * 100;
-    setSplitPct(clamp(pct, 40, 70));
+    setSplitPct(clamp(pct, 32, 68));
   }
 
   function onDividerPointerDown(e: React.PointerEvent) {
@@ -326,16 +333,16 @@ export default function CreatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [betaKey]);
 
-  // history
+  // ==========================
+  // ✅ History (local) + Resume
+  // ==========================
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
     const raw = localStorage.getItem("create_history");
     if (raw) {
       const arr = JSON.parse(raw) as HistoryItem[];
       setHistory(arr);
-      setActiveId(arr[0]?.id ?? null);
     }
   }, []);
 
@@ -343,8 +350,87 @@ export default function CreatePage() {
     localStorage.setItem("create_history", JSON.stringify(history));
   }, [history]);
 
-  const active = useMemo(() => history.find((h) => h.id === activeId) ?? null, [history, activeId]);
+  // ✅ Higgsfield-like on mobile/tablet: Create / Preview toggle
+  const [mobileView, setMobileView] = useState<"create" | "preview">("create");
 
+  function updateHistoryItem(id: string, patch: Partial<HistoryItem>) {
+    setHistory((h) => h.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  }
+
+  async function resumeOne(item: HistoryItem) {
+    if (!betaKey) return;
+    if (!item.requestId) return;
+
+    // 已有输出，不需要恢复
+    if (item.outputUrl) return;
+
+    const statusRes = await apiFetch("/api/fal/status", {
+      method: "POST",
+      body: JSON.stringify({
+        modelId: item.modelId,
+        requestId: item.requestId,
+        chargedCredits: item.chargedCredits ?? 0,
+      }),
+    });
+
+    const statusJson = await statusRes.json();
+    const st = statusJson.status as HistoryItem["status"];
+    updateHistoryItem(item.id, { status: st });
+
+    if (st === "COMPLETED") {
+      const resultRes = await apiFetch("/api/fal/result", {
+        method: "POST",
+        body: JSON.stringify({ modelId: item.modelId, requestId: item.requestId }),
+      });
+      const resultJson = await resultRes.json();
+      const data = resultJson?.data ?? resultJson;
+      const { url, type } = pickOutputUrl(data);
+
+      updateHistoryItem(item.id, {
+        status: "COMPLETED",
+        outputUrl: url,
+        outputType: type,
+      });
+      await refreshCredits();
+    }
+
+    if (st === "FAILED") {
+      updateHistoryItem(item.id, { status: "FAILED", error: statusJson?.error ?? "FAILED" });
+      await refreshCredits();
+    }
+  }
+
+  // ✅ 页面加载后自动恢复：把“后台已经完成但前台没拿到 outputUrl”的任务补回来
+  useEffect(() => {
+    if (!betaKey) return;
+    if (!history.length) return;
+
+    const toResume = history
+      .slice(0, 10)
+      .filter((it) => it.requestId && !it.outputUrl && it.status !== "FAILED");
+
+    if (!toResume.length) return;
+
+    let cancelled = false;
+
+    (async () => {
+      for (const it of toResume) {
+        if (cancelled) return;
+        try {
+          await resumeOne(it);
+        } catch {
+          // ignore
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [betaKey, history.length]);
+
+  // ---------------- Upload ----------------
   async function uploadImage(currentMode: CreateMode): Promise<{ url: string; meta?: any }> {
     const f = forms[currentMode];
     if (!f.imageFile) throw new Error("Please upload an image first.");
@@ -400,51 +486,41 @@ export default function CreatePage() {
     const m = getModelUI(args.modelId);
     const input: Record<string, any> = {};
 
-    // prompt（Upscaler 也允许，但可为空）
     if (m.supports.prompt) {
       const p = (args.prompt ?? "").trim();
       if (p.length > 0) input.prompt = p;
-      // 如果 prompt 为空：不传，让模型按默认/只 upscale
     }
 
-    // image
     if (m.supports.imageInput && args.imageUrl && m.inputKeys.imageUrl) {
       input[m.inputKeys.imageUrl] = args.imageUrl;
     }
 
-    // negative
     if (m.supports.negativePrompt && args.negativePrompt && m.inputKeys.negativePrompt) {
       input[m.inputKeys.negativePrompt] = args.negativePrompt;
     }
 
-    // aspect
     if (m.supports.aspectRatio && m.inputKeys.aspectRatio) {
       input[m.inputKeys.aspectRatio] = args.aspectRatio;
     }
 
-    // duration
     if (m.supports.duration && m.inputKeys.duration) {
       const v = durationToFalValue(args.modelId, args.seconds);
       input[m.inputKeys.duration] = v;
     }
 
-    // audio (Veo3)
     if (m.supports.audio && m.inputKeys.audio) {
       input[m.inputKeys.audio] = Boolean(args.audioEnabled);
     }
 
-    // Recraft
     if (args.mode === "T2I" && args.modelId === "fal-ai/recraft/v3/text-to-image") {
       input.style = args.recraftStyle;
       input.size = args.recraftSize;
     }
 
-    // Flux edit
     if (args.mode === "I+T2I" && args.modelId === "fal-ai/flux-2/lora/edit") {
       input.image_size = args.imageSize;
     }
 
-    // Upscaler
     if (args.mode === "I+T2I" && args.modelId === "fal-ai/clarity-upscaler") {
       input.scale = 2;
     }
@@ -458,10 +534,8 @@ export default function CreatePage() {
       const cur = forms[mode];
       const m = getModelUI(cur.modelId);
 
-      // 如果需要图片但没上传：先不显示估算（避免误导）
       if (m.supports.imageInput && !cur.imageFile) return null;
 
-      // 我们这里先用“占位 image_url”，只为了算价（真正 submit 会先 upload）
       const placeholderImageUrl = m.supports.imageInput ? "https://example.com/input.png" : undefined;
 
       const input = buildFalInput({
@@ -482,7 +556,7 @@ export default function CreatePage() {
         mode,
         modelId: cur.modelId,
         input,
-        imageMeta: cur.imageMeta ?? undefined, // upscaler / edit 更准
+        imageMeta: cur.imageMeta ?? undefined,
       });
 
       return q;
@@ -536,8 +610,11 @@ export default function CreatePage() {
 
       base.input = input;
 
+      // ✅ 新任务插到最上面（Preview feed 顶部）
       setHistory((h) => [base, ...h]);
-      setActiveId(id);
+
+      // 移动端：生成后自动跳到 Preview 看进度
+      setMobileView("preview");
 
       const submitRes = await apiFetch("/api/fal/submit", {
         method: "POST",
@@ -547,12 +624,13 @@ export default function CreatePage() {
       const submitJson = await submitRes.json();
       if (!submitRes.ok) throw new Error(submitJson?.error ?? "Submit failed");
 
-      const requestId = submitJson.requestId as string;
+      const requestId = (submitJson.requestId ?? submitJson.jobId) as string;
       const chargedCredits = Number(submitJson.chargedCredits ?? 0);
 
-      setHistory((h) => h.map((it) => (it.id === id ? { ...it, requestId, chargedCredits } : it)));
+      updateHistoryItem(id, { requestId, chargedCredits });
       await refreshCredits();
 
+      // ✅ 轮询：实时更新（刷新也不怕，因为我们有 resume）
       let done = false;
       while (!done) {
         await new Promise((r) => setTimeout(r, 1500));
@@ -564,7 +642,7 @@ export default function CreatePage() {
         const statusJson = await statusRes.json();
         const st = statusJson.status as HistoryItem["status"];
 
-        setHistory((h) => h.map((it) => (it.id === id ? { ...it, status: st } : it)));
+        updateHistoryItem(id, { status: st });
 
         if (st === "COMPLETED") {
           const resultRes = await apiFetch("/api/fal/result", {
@@ -575,12 +653,13 @@ export default function CreatePage() {
           const data = resultJson?.data ?? resultJson;
 
           const { url, type } = pickOutputUrl(data);
-          setHistory((h) => h.map((it) => (it.id === id ? { ...it, status: "COMPLETED", outputUrl: url, outputType: type } : it)));
+          updateHistoryItem(id, { status: "COMPLETED", outputUrl: url, outputType: type });
           done = true;
           await refreshCredits();
         }
 
         if (st === "FAILED") {
+          updateHistoryItem(id, { status: "FAILED", error: statusJson?.error ?? "FAILED" });
           done = true;
           await refreshCredits();
         }
@@ -606,9 +685,14 @@ export default function CreatePage() {
 
   const assist = ASSIST_BY_MODE[mode];
 
+  // ✅ Preview feed：按时间倒序（新在上面）
+  const feed = useMemo(() => {
+    return [...history].sort((a, b) => b.createdAt - a.createdAt);
+  }, [history]);
+
   return (
     <main className="min-h-[calc(100vh-72px)] bg-black text-white">
-      <div className="mx-auto w-full px-4 py-4 2xl:px-10">
+      <div className="mx-auto w-full px-3 py-3 sm:px-4 sm:py-4 2xl:px-10">
         {/* top bar */}
         <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -632,7 +716,10 @@ export default function CreatePage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <button onClick={() => onUpgrade("10")} className="rounded-full bg-cyan-400 px-3 py-2 font-medium text-black hover:bg-cyan-300">
+              <button
+                onClick={() => onUpgrade("10")}
+                className="rounded-full bg-cyan-400 px-3 py-2 font-medium text-black hover:bg-cyan-300"
+              >
                 Top up $10
               </button>
               <button onClick={() => onUpgrade("30")} className="rounded-full bg-white/10 px-3 py-2 text-white/80 hover:bg-white/15">
@@ -643,19 +730,44 @@ export default function CreatePage() {
               </button>
             </div>
           </div>
+
+          {/* ✅ Mobile / Tablet toggle (Higgsfield-like) */}
+          <div className="flex w-full items-center justify-between gap-2 rounded-2xl border border-white/10 bg-white/5 p-1 lg:hidden">
+            <button
+              onClick={() => setMobileView("create")}
+              className={[
+                "flex-1 rounded-2xl px-3 py-2 text-sm font-semibold transition",
+                mobileView === "create" ? "bg-cyan-400 text-black" : "text-white/80 hover:bg-white/10",
+              ].join(" ")}
+            >
+              Create
+            </button>
+            <button
+              onClick={() => setMobileView("preview")}
+              className={[
+                "flex-1 rounded-2xl px-3 py-2 text-sm font-semibold transition",
+                mobileView === "preview" ? "bg-cyan-400 text-black" : "text-white/80 hover:bg-white/10",
+              ].join(" ")}
+            >
+              Preview
+            </button>
+          </div>
         </div>
 
-        {/* shell */}
+        {/* shell: desktop two-panel / mobile single-panel */}
         <div
           ref={shellRef}
           id="editor-shell"
-          className="grid min-h-[78vh] w-full overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02]"
+          className={[
+            "w-full overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02]",
+            "lg:grid",
+          ].join(" ")}
           style={{
-            gridTemplateColumns: `72px minmax(420px, ${splitPct}%) 8px minmax(420px, ${100 - splitPct}%)`,
+            gridTemplateColumns: `72px minmax(420px, ${splitPct}%) 8px minmax(520px, ${100 - splitPct}%)`,
           }}
         >
-          {/* left sidebar */}
-          <aside className="shrink-0 border-b border-white/10 bg-black/30 lg:w-[72px] lg:border-b-0 lg:border-r">
+          {/* left sidebar (desktop only) */}
+          <aside className="hidden shrink-0 border-b border-white/10 bg-black/30 lg:block lg:w-[72px] lg:border-b-0 lg:border-r">
             <div className="flex items-center gap-2 overflow-x-auto p-3 lg:h-full lg:flex-col lg:overflow-x-visible">
               {MODE_TABS.map((t) => {
                 const a = t.mode === mode;
@@ -677,8 +789,37 @@ export default function CreatePage() {
             </div>
           </aside>
 
+          {/* mobile mode tabs */}
+          <div className="lg:hidden border-b border-white/10 bg-black/30">
+            <div className="flex items-center gap-2 overflow-x-auto p-2">
+              {MODE_TABS.map((t) => {
+                const a = t.mode === mode;
+                return (
+                  <button
+                    key={t.mode}
+                    onClick={() => switchMode(t.mode)}
+                    className={[
+                      "shrink-0 rounded-2xl px-3 py-2 text-xs font-bold transition",
+                      a ? "bg-cyan-400 text-black" : "bg-white/5 text-white/70 hover:bg-white/10",
+                    ].join(" ")}
+                    title={t.sub}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* middle editor */}
-          <section className="relative overflow-auto p-5 lg:h-full">
+          <section
+            className={[
+              "relative overflow-auto p-4 sm:p-5 lg:h-full",
+              // ✅ mobile: show/hide
+              "lg:block",
+              mobileView === "create" ? "block" : "hidden",
+            ].join(" ")}
+          >
             {/* Model */}
             <div className="mb-4">
               <div className="mb-2 text-sm text-white/60">Model</div>
@@ -733,7 +874,7 @@ export default function CreatePage() {
                   value={form.prompt}
                   onChange={(e) => setForms((prev) => ({ ...prev, [mode]: { ...prev[mode], prompt: e.target.value } }))}
                   placeholder={form.modelId === "fal-ai/clarity-upscaler" ? "Optional: add mild quality hints..." : "Describe what you want…"}
-                  className="mt-2 h-[140px] w-full resize-none rounded-xl border border-white/10 bg-black/40 p-3 text-sm outline-none focus:border-cyan-400"
+                  className="mt-2 h-[160px] w-full resize-none rounded-xl border border-white/10 bg-black/40 p-3 text-sm outline-none focus:border-cyan-400"
                 />
               </div>
             )}
@@ -761,7 +902,7 @@ export default function CreatePage() {
                     <img
                       src={form.imagePreviewUrl}
                       alt="input preview"
-                      className="max-h-[220px] w-full rounded-xl border border-white/10 object-contain"
+                      className="max-h-[240px] w-full rounded-xl border border-white/10 object-contain"
                     />
                     {form.imageMeta?.width && form.imageMeta?.height && (
                       <div className="mt-2 text-xs text-white/50">
@@ -938,9 +1079,7 @@ export default function CreatePage() {
 
               <div className="min-w-[140px] rounded-2xl border border-white/10 bg-black/40 px-3 py-3 text-center">
                 <div className="text-[10px] text-white/50">Estimated</div>
-                <div className="text-sm font-semibold text-white">
-                  {est ? `${est.sellCredits} credits` : "—"}
-                </div>
+                <div className="text-sm font-semibold text-white">{est ? `${est.sellCredits} credits` : "—"}</div>
               </div>
             </div>
 
@@ -963,84 +1102,116 @@ export default function CreatePage() {
             </div>
           </div>
 
-          {/* right preview + history */}
-          <section className="flex flex-1 flex-col border-t border-white/10 bg-black/20 lg:border-l lg:border-t-0">
+          {/* right preview feed */}
+          <section
+            className={[
+              "flex flex-1 flex-col border-t border-white/10 bg-black/20 lg:border-l lg:border-t-0",
+              "lg:block",
+              mobileView === "preview" ? "block" : "hidden",
+            ].join(" ")}
+          >
             <div className="border-b border-white/10 px-4 py-3">
               <div className="text-sm font-semibold">Preview</div>
-              <div className="text-xs text-white/50">Latest result · click history to switch</div>
+              <div className="text-xs text-white/50">Latest results · newest on top (Kling-like feed)</div>
             </div>
 
-            <div className="flex flex-1 overflow-hidden flex-col lg:flex-row">
-              <div className="flex-1 overflow-auto p-4">
-                {!active ? (
-                  <div className="flex h-full items-center justify-center text-white/40">No generation yet. Create something on the left →</div>
-                ) : (
-                  <div>
-                    <div className="mb-3 rounded-2xl border border-white/10 bg-white/5 p-3">
-                      <div className="mb-1 text-xs text-white/50">{new Date(active.createdAt).toLocaleString()}</div>
-                      <div className="text-sm font-medium">{active.modelId}</div>
-                      <div className="mt-1 line-clamp-3 text-xs text-white/60">{active.prompt}</div>
-                      <div className="mt-2 text-xs">
-                        Status:{" "}
-                        <span className={active.status === "COMPLETED" ? "text-emerald-300" : "text-cyan-300"}>{active.status}</span>
-                        {typeof active.chargedCredits === "number" && (
-                          <span className="ml-2 text-white/50">Charged: {active.chargedCredits}</span>
-                        )}
-                      </div>
-                    </div>
+            <div className="flex-1 overflow-auto p-4">
+              {!feed.length ? (
+                <div className="flex h-full items-center justify-center text-white/40">
+                  No generation yet. Create something on the left →
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {feed.map((it) => {
+                    const isVideo = it.outputType === "video";
+                    const isImage = it.outputType === "image";
+                    const dt = new Date(it.createdAt);
 
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
-                      {active.outputUrl ? (
-                        active.outputType === "video" ? (
-                          <video src={active.outputUrl} controls className="w-full rounded-xl border border-white/10" />
-                        ) : (
-                          <img src={active.outputUrl} className="w-full rounded-xl border border-white/10" alt="output" />
-                        )
-                      ) : (
-                        <div className="flex h-[320px] items-center justify-center text-white/40">Waiting for output…</div>
-                      )}
-
-                      {active.outputUrl && (
-                        <a
-                          href={active.outputUrl}
-                          target="_blank"
-                          className="mt-3 inline-block text-sm text-cyan-300 hover:text-cyan-200"
-                          rel="noreferrer"
-                        >
-                          Open output in new tab →
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="w-full shrink-0 overflow-auto border-t border-white/10 lg:w-[320px] lg:border-l lg:border-t-0">
-                <div className="border-b border-white/10 px-4 py-3 text-sm font-semibold">History ({history.length})</div>
-                <div className="p-2">
-                  {history.map((h) => {
-                    const isActive = h.id === activeId;
                     return (
-                      <button
-                        key={h.id}
-                        onClick={() => setActiveId(h.id)}
-                        className={[
-                          "mb-2 w-full rounded-xl border p-3 text-left transition",
-                          isActive ? "border-cyan-400 bg-cyan-400/10" : "border-white/10 bg-white/5 hover:bg-white/10",
-                        ].join(" ")}
-                      >
-                        <div className="text-xs text-white/50">{new Date(h.createdAt).toLocaleTimeString()} · {h.mode}</div>
-                        <div className="mt-1 line-clamp-1 text-xs text-white/70">{h.modelId}</div>
-                        <div className="mt-1 line-clamp-2 text-xs text-white/50">{h.prompt}</div>
-                        <div className="mt-2 text-xs text-white/60">
-                          Status: {h.status}
-                          {typeof h.chargedCredits === "number" && <span className="ml-2 text-white/50">Charged: {h.chargedCredits}</span>}
+                      <div key={it.id} className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+                        <div className="flex flex-col gap-2 border-b border-white/10 bg-black/30 px-4 py-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-xs text-white/50">
+                              {dt.toLocaleString()} · <span className="text-white/70">{it.mode}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <StatusPill s={it.status} />
+                              {typeof it.chargedCredits === "number" && (
+                                <span className="text-[11px] text-white/50">Charged: {it.chargedCredits}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-sm font-medium">{it.modelId}</div>
+                          {it.prompt ? <div className="text-xs text-white/60 line-clamp-3">{it.prompt}</div> : null}
+                          {it.error ? <div className="text-xs text-rose-200/90">Error: {it.error}</div> : null}
                         </div>
-                      </button>
+
+                        <div className="p-3 sm:p-4">
+                          {it.outputUrl ? (
+                            isVideo ? (
+                              <video
+                                src={it.outputUrl}
+                                controls
+                                playsInline
+                                preload="metadata"
+                                className="w-full rounded-xl border border-white/10 bg-black"
+                              />
+                            ) : isImage ? (
+                              <img
+                                src={it.outputUrl}
+                                className="w-full rounded-xl border border-white/10"
+                                alt="output"
+                              />
+                            ) : (
+                              <div className="flex h-[320px] items-center justify-center text-white/40">
+                                Output ready, but type unknown.
+                              </div>
+                            )
+                          ) : (
+                            <div className="flex h-[320px] items-center justify-center text-white/40">
+                              Waiting for output…
+                            </div>
+                          )}
+
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-xs text-white/40">
+                              {it.requestId ? (
+                                <span>
+                                  request_id: <span className="text-white/60">{it.requestId}</span>
+                                </span>
+                              ) : (
+                                <span>request_id: —</span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {it.requestId && !it.outputUrl && it.status !== "FAILED" ? (
+                                <button
+                                  onClick={() => resumeOne(it)}
+                                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/80 hover:bg-white/10"
+                                >
+                                  Refresh result
+                                </button>
+                              ) : null}
+
+                              {it.outputUrl ? (
+                                <a
+                                  href={it.outputUrl}
+                                  target="_blank"
+                                  className="rounded-full bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-black hover:bg-cyan-300"
+                                  rel="noreferrer"
+                                >
+                                  Open →
+                                </a>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
-              </div>
+              )}
             </div>
           </section>
         </div>

@@ -1,3 +1,4 @@
+// /app/api/fal/submit/route.ts
 import { NextResponse } from "next/server";
 import { fal } from "@fal-ai/client";
 import { requireBetaKey } from "@/lib/gate";
@@ -35,7 +36,6 @@ export async function POST(req: Request) {
     const quote = quotePrice({ mode, modelId, input, imageMeta });
 
     // 2) charge credits（幂等 key：本次提交唯一）
-    // 重要：不能用 Date.now() 做“可重试幂等”，但对你当前前端“点一次提交一次”足够稳
     const idem = `gen_charge:${g.betaKey}:${modelId}:${crypto.randomUUID()}`;
 
     const charged = await chargeCreditsByBetaKey({
@@ -72,6 +72,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         requestId,
+        jobId: requestId, // ✅ 增强：前端统一用 jobId 也可以
         chargedCredits: quote.sellCredits,
         remaining: charged.remaining,
         quote,
