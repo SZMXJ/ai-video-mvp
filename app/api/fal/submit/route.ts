@@ -4,6 +4,7 @@ import { fal } from "@fal-ai/client";
 import { requireBetaKey } from "@/lib/gate";
 import { quotePrice, type CreateMode, type ModelId } from "@/lib/pricing";
 import { chargeCreditsByBetaKey, addCreditsByBetaKey } from "@/lib/dbBilling";
+import { createJob } from "@/lib/jobs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,7 +59,6 @@ export async function POST(req: Request) {
       const requestId = (res as any)?.request_id;
 
       if (!requestId) {
-        // 没拿到 request_id => 退款（幂等）
         await addCreditsByBetaKey({
           betaKey: g.betaKey,
           amount: quote.sellCredits,
@@ -70,9 +70,20 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Fal submit returned no request_id (refunded)" }, { status: 500 });
       }
 
+      // ✅ 4) create DB job (QUEUED)
+      const job = await createJob({
+        betaKey: g.betaKey,
+        mode,
+        modelId,
+        requestId,
+        prompt: typeof input?.prompt === "string" ? input.prompt : null,
+        inputJson: input,
+        chargedCredits: quote.sellCredits,
+      });
+
       return NextResponse.json({
         requestId,
-        jobId: requestId, // ✅ 增强：前端统一用 jobId 也可以
+        jobId: job.id, // ✅ 现在是真正的 DB jobId
         chargedCredits: quote.sellCredits,
         remaining: charged.remaining,
         quote,
